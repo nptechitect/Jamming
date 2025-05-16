@@ -5,7 +5,7 @@ import './layout.module.css'
 
 export default function Layout() {
     return (
-        <div>
+        <div className="pageWrapper">
             {/* Header Component */}
             <Header />
 

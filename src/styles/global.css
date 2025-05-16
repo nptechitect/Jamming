@@ -1,0 +1,31 @@
+body {
+  background: url('@/assets/images/jamming-bg.png') no-repeat center center fixed;
+  background-size: cover;
+}
+
+#root {
+    margin: 0 auto; /* Center the page content */
+    min-width: 375px; /* Limit how small the site can be */
+}
+
+/* Limit the page to 1000px when screen is bigger */
+@media only screen and (min-width: 1000px){
+    #root {
+        max-width: 1000px;
+    }
+}
+
+.pageWrapper {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.pageWrapper header, .pageWrapper footer {
+    flex-grow: 0; /* header and footer won't grow */
+}
+
+.pageWrapper main {
+    flex-grow: 1; /* set the content to fill the remaining space */
+}

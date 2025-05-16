@@ -1,0 +1,10 @@
+:root {
+
+    /* overlay color for separating background from site contents */
+    --overlay: rgba(0, 0, 0, 0.3);
+
+    /* text colors */
+    --primary-text: white;
+
+    --link-hover: rgb(20, 20, 20);
+}
