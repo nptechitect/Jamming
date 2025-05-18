@@ -4,7 +4,7 @@ export const MusicServices = [
     id: "tidal",
     name: "Tidal",
     authUri: "https://login.tidal.com/authorize",
-    tokenUri: "https://login.tidal.com/authorize",
+    tokenUri: "https://auth.tidal.com/v1/oauth2/token",
     clientId: import.meta.env.VITE_TIDAL_APP_ID,
     redirectUri: `${window.location.origin}/auth/callback`,
     scopes: [

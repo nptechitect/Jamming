@@ -14,10 +14,44 @@ export const AuthContext = createContext ({
     setAuthStatus: () => {},
 });
 
+// Helper: generate a secure random string for PKCE
+function generateRandomString(length = 128) {
+  const array = new Uint8Array(length);
+  window.crypto.getRandomValues(array);
+  return Array.from(array)
+    .map((b) => ('0' + (b % 256).toString(16)).slice(-2))
+    .join('');
+}
+
+// Helper: base64-url-encode an ArrayBuffer
+function base64UrlEncode(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let str = '';
+  for (const byte of bytes) str += String.fromCharCode(byte);
+  return btoa(str)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+// Helper: generate code challenge from verifier
+async function generateCodeChallenge(verifier) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await window.crypto.subtle.digest('SHA-256', data);
+  return base64UrlEncode(digest);
+}
+
 export function AuthProvider({ children }) {
-    const [selectedService, setSelectedService] = useState(null);
-    const [tokens, setTokens] = useState({});
-    const [authStatus, setAuthStatus] = useState({});
+    const [selectedService, setSelectedService] = useState(
+        () => localStorage.getItem('selectedService') || null
+    );
+    const [tokens, setTokens] = useState(
+        () => localStorage.getItem('tokens') || {}
+    );
+    const [authStatus, setAuthStatus] = useState(
+        () => localStorage.getItem('authStatus') || {}
+    );
     const [loading, setLoading] = useState(true);
 
     // Load saved state when created
@@ -45,8 +79,10 @@ export function AuthProvider({ children }) {
     // Presist selectedService on change, remove if missing
     useEffect(() => {
         if (selectedService) {
+            // console.log("Saving selectedService", selectedService);
             localStorage.setItem('selectedService', selectedService)
         } else {
+            // console.log("Removing selectedService", selectedService);
             localStorage.removeItem('selectedService');
         }
     }, [selectedService]);
@@ -54,6 +90,8 @@ export function AuthProvider({ children }) {
     // Select a service
     const selectService = (serviceId) => {
         setSelectedService(serviceId);
+        // persist immediately so callback can read it after redirect
+        // localStorage.setItem('selectedService', serviceId);
     };
 
     // Initiate OAuth Login
@@ -63,15 +101,37 @@ export function AuthProvider({ children }) {
         // Exit if no service found
         if (!service) return;
 
-        // build uri
-        const params = new URLSearchParams({
-            client_id: service.clientId,
-            redirect_uri: service.redirect_uri,
-            response_type: 'code',
-            scope: service.scopes.join(' '),
-        });
+        // // use pkce-challenge library to generate verifier & challenge
+        // const { code_verifier, code_challenge } = pkceChallenge();
+        // console.log("verifier", code_verifier);
+        // console.log("challenge", code_challenge);
+        // console.log("Saving verifier");
+        // localStorage.setItem(`pkce_${id}`, code_verifier);
+        // console.log("Verifier saved");
 
-        window.location.href = `${service.authUri} ? ${params.toString()}`;
+        // Create verifier and challenge
+        const codeVerifier = generateRandomString();
+        generateCodeChallenge(codeVerifier).then((codeChallenge) => {
+            // persist the verifier
+            localStorage.setItem(`pkce_${serviceId}`, codeVerifier);
+
+            // const stateObj = { serviceId, code_verifier };
+            // const encodedState = btoa(JSON.stringify(stateObj));
+
+            // build uri
+            const params = new URLSearchParams({
+                client_id: service.clientId,
+                redirect_uri: service.redirectUri,
+                response_type: 'code',
+                scope: service.scopes.join(' '),
+                code_challenge: codeChallenge,
+                code_challenge_method: 'S256',
+                state: serviceId,
+            });
+
+            // alert("Ready to continue");
+            window.location.href = `${service.authUri}?${params.toString()}`;
+        });
     }
 
     // Initiate OAuth Logout

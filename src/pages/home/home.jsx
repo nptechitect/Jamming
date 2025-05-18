@@ -1,7 +1,7 @@
 // src/pages/home/home.jsx
 import React, { useContext } from 'react';
-import { AuthContext } from '../../context/authContext/authContext';
-// import ServiceButton from '@/components/serviceButton/serviceButton';
+import { AuthContext } from '@/context/authContext/authContext';
+import ServiceButton from '@/components/serviceButton/serviceButton';
 import styles from './Home.module.css'
 
 export default function Home() {
@@ -13,6 +13,16 @@ export default function Home() {
         selectService,
         login
     } = useContext(AuthContext);
+
+    const handleServiceSelection = (serviceId) => {
+        console.log('Selected Service ' + services.find((s) => s.id === serviceId).name);
+        selectService(serviceId);
+    }
+
+    const handleServiceConnection = (serviceId) => {
+        console.log('Connecting to ' + services.find((s) => s.id === serviceId).name);
+        login(serviceId);
+    }
 
     if (loading) {
         return <div className={styles.loading}>Loading...</div>
@@ -28,7 +38,11 @@ export default function Home() {
                     <ul>
                         {services.map((service) => (
                             <li key={service.id} className={styles.serviceItem}>
-                                {service.name}
+                                <ServiceButton
+                                    service={service}
+                                    onSelect={handleServiceSelection}
+                                    onConnect={handleServiceConnection}
+                                />
                             </li>
                         ))}
                     </ul>

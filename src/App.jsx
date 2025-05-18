@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Layout from '@/components/layout/layout'
 import Home from '@/pages/home/home'
 import Test from '@/pages/test/test'
+import AuthCallback from '@/pages/authCallback/authCallback'
 import './App.css'
 
 function App() {
@@ -17,7 +18,7 @@ function App() {
         <Route path='/test' element={<Test />} />
 
         {/* Auth Callback handler */}
-        {/* <Route path='/auth/callback' element={<></>} /> */}
+        <Route path='/auth/callback' element={<AuthCallback />} />
       </Route>
 
       {/* Catch-All -> redirect home */}
