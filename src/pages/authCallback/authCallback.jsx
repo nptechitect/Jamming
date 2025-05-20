@@ -13,10 +13,15 @@ export default function AuthCallback() {
 
     useEffect(() => {
         const code = searchParams.get('code');
-        const serviceId = searchParams.get('state');
+        let serviceId = searchParams.get('state');
+
+
         if (!serviceId){
-            setError('Service ID missing from state');
-            return;
+            serviceId = selectedService
+            if (!serviceId) {
+                setError('Service ID missing from state');
+                return;
+            }
         }
 
         // Check if we have a code
@@ -57,7 +62,10 @@ export default function AuthCallback() {
             })
             .then((data) => {
                 // Save tokens and mark service as authenticated
-                setTokens((prev) => ({ ...prev, [serviceId]: data }));
+                setTokens((prev) => {
+                    const updated = { ...prev, [serviceId]: data };
+                    return updated;
+                });
                 setAuthStatus((prev) => ({ ...prev, [serviceId]: true}));
                 // Redirect back to home/dashboard
                 navigate('/');

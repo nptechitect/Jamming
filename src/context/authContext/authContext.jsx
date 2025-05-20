@@ -12,7 +12,9 @@ export const AuthContext = createContext ({
     logout: () => {},
     setTokens: () => {},
     setAuthStatus: () => {},
+    refreshToken: () => {},
 });
+const refreshTimeouts = {}; // map serviceId -> timout ID
 
 // Helper: generate a secure random string for PKCE
 function generateRandomString(length = 128) {
@@ -79,19 +81,40 @@ export function AuthProvider({ children }) {
     // Presist selectedService on change, remove if missing
     useEffect(() => {
         if (selectedService) {
-            // console.log("Saving selectedService", selectedService);
             localStorage.setItem('selectedService', selectedService)
         } else {
-            // console.log("Removing selectedService", selectedService);
             localStorage.removeItem('selectedService');
         }
     }, [selectedService]);
 
+    // --- Refresh Logic ---
+    // Helper: Refresh token automatically based on timer
+    const scheduleRefresh = (serviceId, expiresInSeconds) => {
+        // clear any existing timer
+        if (refreshTimeouts[serviceId]) {
+            clearTimeout(refreshTimeouts[serviceId])
+        }
+
+        // refresh a minute before actual expiry
+        const refreshInMs = (expiresInSeconds - 60) * 1000;
+
+        refreshTimeouts[serviceId] = setTimeout(() => {
+            refreshToken(serviceId);
+        }, refreshInMs);
+    }
+
+    // Rehydrate and schedule pending refreshes on mount
+    useEffect(() => {
+        Object.entries(tokens).forEach(([svcId, data]) => {
+            if (data.expires_in) {
+                scheduleRefresh(svcId, data.expires_in);
+            }
+        })
+    });
+
     // Select a service
     const selectService = (serviceId) => {
         setSelectedService(serviceId);
-        // persist immediately so callback can read it after redirect
-        // localStorage.setItem('selectedService', serviceId);
     };
 
     // Initiate OAuth Login
@@ -101,22 +124,11 @@ export function AuthProvider({ children }) {
         // Exit if no service found
         if (!service) return;
 
-        // // use pkce-challenge library to generate verifier & challenge
-        // const { code_verifier, code_challenge } = pkceChallenge();
-        // console.log("verifier", code_verifier);
-        // console.log("challenge", code_challenge);
-        // console.log("Saving verifier");
-        // localStorage.setItem(`pkce_${id}`, code_verifier);
-        // console.log("Verifier saved");
-
         // Create verifier and challenge
         const codeVerifier = generateRandomString();
         generateCodeChallenge(codeVerifier).then((codeChallenge) => {
             // persist the verifier
             localStorage.setItem(`pkce_${serviceId}`, codeVerifier);
-
-            // const stateObj = { serviceId, code_verifier };
-            // const encodedState = btoa(JSON.stringify(stateObj));
 
             // build uri
             const params = new URLSearchParams({
@@ -129,7 +141,6 @@ export function AuthProvider({ children }) {
                 state: serviceId,
             });
 
-            // alert("Ready to continue");
             window.location.href = `${service.authUri}?${params.toString()}`;
         });
     }
@@ -157,6 +168,49 @@ export function AuthProvider({ children }) {
         }
     }
 
+    // refresh the token
+    const refreshToken = async (serviceId) => {
+        const service = MusicServices.find((s) => s.id === serviceId);
+        const stored = tokens[serviceId];
+        const refreshToken = stored?.refresh_token;
+        if (!refreshToken) return logout(serviceId); // nothing to refresh
+
+        const body = new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+            client_id: service.clientId,
+        }).toString();
+
+        try {
+            const res = await fetch(service.tokenUri, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': `Basic ${btoa(`${service.clientId}:${service.clientSecret}`)}`,
+                    'Accept': 'application/json',
+                },
+                body: body,
+            });
+
+            if (!res.ok) throw new Error('Refresh failed');
+
+            const data = await res.json()
+            setTokens((prev) => {
+                const updated = {
+                    ...prev,
+                    [serviceId]: { ...prev[serviceId], ...data },
+                }
+                scheduleRefresh(serviceId, data.expires_in)
+                return updated
+            })
+
+            setAuthStatus((prev) => ({ ...prev, [serviceId]: true }))
+        }catch (err) {
+            console.error('Token refresh error:', err);
+            logout(serviceId);
+        }
+    }
+
     const value = {
         services: MusicServices,
         selectedService,
@@ -167,7 +221,8 @@ export function AuthProvider({ children }) {
         login,
         logout,
         setTokens,
-        setAuthStatus
+        setAuthStatus,
+        refreshToken
     };
 
     return (

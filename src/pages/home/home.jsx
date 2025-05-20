@@ -11,7 +11,8 @@ export default function Home() {
         authStatus,
         loading,
         selectService,
-        login
+        login,
+        refreshToken,
     } = useContext(AuthContext);
 
     const handleServiceSelection = (serviceId) => {

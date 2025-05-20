@@ -4,6 +4,19 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthProvider, AuthContext } from './authContext'
 import { MusicServices } from '@/config/musicServices';
 
+const initialToken = {
+    tidal: {
+        access_token: 'old-access',
+        refresh_token: 'old-refresh',
+        expires_in: 3000,
+    }
+}
+const refreshedResponse = {
+    access_token: 'new-access',
+    refresh_token: 'new-refresh',
+    expires_in: 7200,
+}
+
 // Helper consume component to access context
 function TestConsumer() {
     const {
@@ -33,6 +46,18 @@ function TestConsumer() {
             <button data-testid="logout" onClick={() => logout('tidal')} />
         </div>
     );
+}
+
+// Helper consumer to trigger refreshToken and display tokens
+function RefreshConsumer() {
+    const {tokens, refreshToken} = useContext(AuthContext);
+
+    return (
+        <div>
+            <div data-testid="tokens">{JSON.stringify(tokens)}</div>
+            <button data-testid="refresh" onClick={() => refreshToken('tidal')} />
+        </div>
+    )
 }
 
 describe('AuthContext', () => {
@@ -78,7 +103,7 @@ describe('AuthContext', () => {
         expect(localStorage.getItem('selectedService')).toBe('tidal');
     });
 
-    it('login redirects to the correct URL', () => {
+    it('login redirects to the correct URL', async () => {
         render(
             <AuthProvider>
                 <TestConsumer />
@@ -86,8 +111,12 @@ describe('AuthContext', () => {
         );
 
         fireEvent.click(screen.getByTestId('login'));
-        expect(window.location.href).toContain(MusicServices.find(s => s.id === 'tidal').authUri);
-        expect(window.location.href).toContain(MusicServices.find(s => s.id === 'tidal').clientId);
+
+        await waitFor(() => {
+            const cfg = MusicServices.find((s) => s.id === 'tidal');
+            expect(window.location.href).toContain(cfg.authUri);
+            expect(window.location.href).toContain(cfg.clientId);
+        })
     })
 
     it('logout clears selectedService, tokens, and authStatus', async () => {
@@ -110,4 +139,60 @@ describe('AuthContext', () => {
         expect(screen.getByTestId('authStatus')).toHaveTextContent('{}');
         expect(localStorage.getItem('selectedService')).toBeNull();
     });
-})
+});
+
+describe('AuthContext - RefreshToken', () => {
+
+
+    beforeEach(() => {
+        vi.resetAllMocks()
+        localStorage.clear()
+        // Pre-Populate context state from localStorage
+        localStorage.setItem('tokens', JSON.stringify(initialToken));
+
+        // mock the fetch that refreshToken will call
+        global.fetch = vi.fn(() => {
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(refreshedResponse),
+            })
+        })
+    })
+
+    it('should POST a refresh_token grant and update tokens in context', async () => {
+        render(
+            <AuthProvider>
+                <RefreshConsumer />
+            </AuthProvider>
+        )
+
+        // before refresh: show the old tokens
+        await waitFor(() => {
+            expect(screen.getByTestId('tokens')).toHaveTextContent(
+                JSON.stringify(initialToken)
+            )
+        })
+
+        // trigger the refresh
+        fireEvent.click(screen.getByTestId('refresh'))
+
+        // wait for fetch to be called with the correct endpoint and body
+        await waitFor(() => {
+            expect(fetch).toHaveBeenCalledWith(
+                MusicServices.find(s => s.id === 'tidal').tokenUri,
+                expect.objectContaining({ method: 'POST' })
+            )
+        })
+
+        // Finally the context tokens should reflect the refreshed values
+        await waitFor(() => {
+            expect(screen.getByTestId('tokens')).toHaveTextContent(
+                JSON.stringify({ tidal: refreshedResponse })
+            )
+        })
+
+        // Also ensure localStorage was updated
+        const stored = JSON.parse(localStorage.getItem('tokens'))
+        expect(stored).toEqual({ tidal: refreshedResponse })
+    })
+});
